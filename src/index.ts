@@ -1,3 +1,5 @@
+import { StringLike } from './stringlike';
+
 interface IParseResult<T> {
   isFailure(): this is ParseFailure<T>
   isSuccess(): this is ParseSuccess<T>
@@ -35,16 +37,31 @@ namespace ParseResult {
 
 
 
+interface Parser<Result> {
+  parse(string: StringLike): ParseResult<Result>
+}
+
 
 class LiteralParserResult {
-  
+
 }
-class LiteralParser {
+class LiteralParser implements Parser<LiteralParserResult> {
   constructor(private expected: string) {}
-  
+  parse(string: StringLike): ParseResult<LiteralParserResult> {
+    return ParseResult.failure;
+  }
 }
 
 
+class NotParserResult {
+}
+class NotParser {
+  constructor(private underlying: Parser<any>) {}
+
+}
+
+
+const notQuote: NotParser = new NotParser(new LiteralParser('"'));
 
 
 
