@@ -1,3 +1,7 @@
+type WrappedStringType = 'wrapped';
+type SliceStringType = 'slice';
+type StringLikeKind = WrappedStringType | SliceStringType;
+
 interface IBaseStringLike {
   indexOf(contained: string, start?: number): number
   findIndices(contained: string, start?: number): number[]
@@ -5,11 +9,14 @@ interface IBaseStringLike {
 
 export interface StringLike extends IBaseStringLike {
   length: number;
+  equals(other: StringLike): boolean
+  getKind(): StringLikeKind
   rangeOnUnderlying(): {start: number, end: number}
   getString(): string
   char(index: number): string|null
   charSlice(index: number): StringLike|null
   slice(start: number, end: number): StringLike
+  combineSlices(other: StringLike): StringLike|null
 }
 export namespace StringLike {
   export function wrap(str: string): StringLike {
@@ -22,11 +29,16 @@ export namespace StringLike {
 
 abstract class BaseStringLike implements StringLike {
   abstract length: number;
+  equals(other: StringLike): boolean {
+    return this.getString() === other.getString();
+  }
   abstract getString(): string
   abstract char(index: number, start?: number): string|null
   abstract indexOf(contained: string, start?: number): number
   abstract rangeOnUnderlying(): {start: number, end: number}
   protected abstract getUnderlying(): string
+  abstract getKind(): StringLikeKind
+  abstract combineSlices(other: StringLike): StringLike|null
   charSlice(index: number): StringLike|null {
     const slice = this.slice(index, index + 1);
     if (slice.length === 0) {
@@ -57,8 +69,15 @@ abstract class BaseStringLike implements StringLike {
 
 class WrappedString extends BaseStringLike implements StringLike {
   constructor(private underlying: string) { super() }
+  getKind(): StringLikeKind {
+    return 'wrapped';
+  }
   get length(): number {
     return this.underlying.length;
+  }
+  combineSlices(other: StringLike): null {
+    // Wrapped strings cannot combine with anything.
+    return null;
   }
   indexOf(contained: string, start?: number): number {
     return this.underlying.indexOf(contained, start);
@@ -90,6 +109,18 @@ class StringSlice extends BaseStringLike implements StringLike {
     this.start = Math.max(Math.min(start, underlying.length - 1), 0);
     this.end   = Math.max(Math.min(end,   underlying.length),     0);
   }
+  combineSlices(other: StringSlice): StringLike|null {
+    if (this.underlying === other.underlying && this.end === other.start) {
+      if (this.start === 0 && other.end === this.underlying.length) {
+        return new WrappedString(this.underlying);
+      }
+      return new StringSlice(this.underlying, this.start, other.end);
+    }
+    return null;
+  }
+  getKind(): 'slice' {
+    return 'slice';
+  }
   get length(): number {
     return this.end - this.start;
   }
@@ -102,9 +133,9 @@ class StringSlice extends BaseStringLike implements StringLike {
       end: this.end
     };
   }
-  indexOf(contained: string, start?: number): number {
-    const result = this.underlying.indexOf(contained, start);
-    if (result < this.start || result >= this.end) {
+  indexOf(contained: string, start: number = 0): number {
+    const result = this.underlying.indexOf(contained, this.start + start);
+    if (result >= this.end) {
       return -1;
     }
     return result;
